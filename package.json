@@ -1,6 +1,6 @@
 {
    "name": "pkg-lumo",
-   "version": "1.0.0-beta",
+   "version": "1.0.1-beta",
    "description": "Compile your own lumo binary",
    "author": "Hlöðver Sigurðsson <hlolli@gmail.com> (http://hlolli.com)",
    "license": "EPL-1.0",
@@ -21,9 +21,9 @@
       "clear": "0.0.1",
       "figlet": "^1.2.0",
       "fs-extra": "^5.0.0",
-      "inquirer": "^5.1.0",
       "jszip": "2.6.1",
       "mkdirp": "^0.5.1",
-      "rimraf": "^2.6.2"
+      "rimraf": "^2.6.2",
+      "yargs-interactive": "^2.0.1"
    }
 }

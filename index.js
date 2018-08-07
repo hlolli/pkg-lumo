@@ -5,14 +5,14 @@ const clear = require('clear');
 const figlet = require('figlet');
 const fs = require('fs');
 const fse = require('fs-extra');
-const inquirer = require('inquirer');
+const yargsInteractive = require('yargs-interactive');
 const mkdirp = require('mkdirp');
 const path = require('path');
 const rmdir = require('rimraf');
 const JSZip = require('jszip');
 const os = require('os');
 
-const lumoVersion = '1.8.0-beta';
+const lumoVersion = '1.9.0-alpha';
 const libDir = path.dirname(fs.realpathSync(__filename));
 
 console.log(
@@ -22,23 +22,23 @@ console.log(
 );
 
 
-const prompt = [
-    {
-        name: 'classpath',
+const prompt = {
+    classpath: {
         type: 'input',
-        message: 'colon seperated project classpath:',
+        prompt: 'if-empty',
+        describe: 'colon seperated project classpath',
     },
-    {
-        name: 'resourceDirs',
+    resources: {
         type: 'input',
-        message: 'colon seperated directory path(s) to embedded resources:',
+        prompt: 'never',
+        describe: 'colon seperated directory path(s) to embedded resources',
     },
-    {
-        name: 'mainNsName',
+    main: {
         type: 'input',
-        message: 'Main namsepace name:',
-    }
-];
+        prompt: 'if-empty',
+        describe: 'Main namsepace name',
+    },
+};
 
 function deleteIfExists(filePath) {
     if (fs.existsSync(filePath)) {
@@ -80,12 +80,12 @@ function extractTarget() {
 function extractLumo() {
     var zipFilePath = path.join(libDir, 'lumo-' + lumoVersion + '.zip');
     var fileContents = fs.readFileSync(zipFilePath);
+    console.log('Extracting lumo sources (with pre-compiled target-dir) from zip');
     var zipped = new JSZip().load(fileContents);
     for (var file in zipped.files) {
 	var content = zipped.file(file);
 	var dest = path.join(process.cwd(), file);
 	if (content && !content.options.dir) {
-	    // console.log(dest, content.options.dir);
 	    writeFileAndDir(dest, content.asNodeBuffer());
 	}
     }
@@ -188,16 +188,30 @@ function generateAOT(options) {
     console.log(`Installing lumo-${lumoVersion} from npm...`);
     
     var child_process = require('child_process');
-    child_process.execSync(`npm install lumo-cljs@${lumoVersion} --no-save`,
-			   {stdio:[0,1,2]});
+
+    const globalLumoVersionNum = child_process.execSync(`lumo --version`)
+          .toString()
+          .replace(/^\s+|\s+$/g, '');
     
-    const isWindows = process.platform === 'win32';
+    const globalLumoMatches = lumoVersion.match(globalLumoVersionNum);
+
+    var binaryPath;
+    if (!globalLumoMatches) {
+        let isWindows = process.platform === 'win32';
+        child_process.execSync(`npm install lumo-cljs@${lumoVersion} --no-save`,
+			       {stdio:[0,1,2]});
+        binaryPath = './node_modules/lumo-cljs/bin/lumo' + (isWindows) ? '.exe' : '';
+    } else {
+        binaryPath = 'lumo';
+    }
+
     const aotTarget = path.join(process.cwd(), 'lumo-' + lumoVersion, 'target', 'aot');
 
-    console.log(`Generateing AOT from main namespace: ${options.mainNsName}`)
-    child_process.execSync(`./node_modules/lumo-cljs/bin/lumo${(isWindows) ? '.exe' : ''} ` +
+    console.log(`Generateing AOT from main namespace: ${options.main}`)
+    child_process.execSync(binaryPath + ' ' +
 			   `--quiet -c ${options.classpath} -sdfk ${aotTarget}` +
-			   ` -e "(require '${options.mainNsName}) (.exit js/process 0)"`,
+			   ` -e "(require '${options.main}) ` +
+                           `(.exit js/process (if ${options.main} 0 -1))"`,
 			   {stdio:[0,1,2]});
 }
 
@@ -225,19 +239,22 @@ function cleanUp() {
     });
 }
 
-inquirer.prompt(prompt).then(res => {
+yargsInteractive()
+    .usage('$0 <command> [args]')
+    .interactive(prompt)
+    .then(res => {
 
-    var resourceDirsArray = res.resourceDirs.split(':');
-    resourceDirsArray = removeEmptyStringFromArray(resourceDirsArray);
-
-    rmdir(path.join(process.cwd(), 'lumo-' + lumoVersion), error => {
-	extractLumo();
-	patchLumoSources();
-	bundle(res);
-	bundleNodeModules();
-	bundleResources(resourceDirsArray);
-	generateAOT(res);
-	packageNexe();
-	cleanUp();
+        var resourceDirsArray = res.resources.split(':');
+        resourceDirsArray = removeEmptyStringFromArray(resourceDirsArray);
+        
+        rmdir(path.join(process.cwd(), 'lumo-' + lumoVersion), error => {
+	    extractLumo();
+	    patchLumoSources();
+	    bundle(res);
+	    bundleNodeModules();
+	    bundleResources(resourceDirsArray);
+	    generateAOT(res);
+	    packageNexe();
+	    cleanUp();
+        });
     });
-});
