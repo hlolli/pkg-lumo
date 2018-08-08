@@ -188,43 +188,7 @@ function bundleResources(resourceDirsArray) {
 }
 
 function generateAOT(options) {
-    const basicRequires = `
-(require 'lumo.build.api
-         'lumo.analyzer
-         'lumo.cljs-deps
-         'lumo.classpath
-         'lumo.closure
-         'lumo.compiler
-         'lumo.io
-         'lumo.json
-         'lumo.util
-         'cljs.pprint
-         'clojure.core.reducers
-         'clojure.zip
-         'clojure.data
-         'clojure.reflect
-         'clojure.browser.net
-         'clojure.browser.event
-         'cljs.nodejs
-         'cljs.test
-         'cljs.analyzer.api
-         'cljs.spec.test.alpha
-         'cljs.core.specs.alpha)
-(require-macros 'lumo.repl
-                'lumo.util
-                'clojure.template
-                'cljs.pprint
-                'cljs.spec.alpha
-                'cljs.spec.gen.alpha
-                'cljs.spec.test.alpha
-                'cljs.support
-                'cljs.test
-                'cljs.reader
-                'cljs.tools.reader.reader-types
-                'cljs.env.macros
-                'cljs.analyzer.macros
-                'cljs.compiler.macros)
-    `;
+
     const isWindows = process.platform === 'win32';
     var child_process = require('child_process');
 
@@ -251,7 +215,6 @@ function generateAOT(options) {
     child_process.execSync(binaryPath + ' ' +
 			   `--quiet -c ${options.classpath} -sdfk ${aotTarget}` +
 			   ` -e "(require '${options.main}) ` +
-                           basicRequires +
                            `(.exit js/process (if ${options.main} 0 -1))"`,
 			   {stdio:[0,1,2]});
 }
