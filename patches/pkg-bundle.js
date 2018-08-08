@@ -58,7 +58,7 @@ const plugins = [
     replace({
 	values: {
 	    'process.env.NODE_ENV': '"production"',
-	    'process.env.LUMO_VERSION': '"1.8.0-beta"',
+	    'process.env.LUMO_VERSION': '"1.9.0-alpha"',
 	},
     }),
     resolve({

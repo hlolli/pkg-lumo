@@ -109,7 +109,7 @@ function patchLumoSources() {
 	    console.error(`Error copying patch ${path.basename(src)}`, err);
 	}
     }
-    var patchDir    = path.join(libDir, 'patch-' + lumoVersion);
+    var patchDir    = path.join(libDir, 'patches');
     var lumoSources = path.join(process.cwd(), 'lumo-' + lumoVersion);
     copyPatch(path.join(patchDir, 'package.js'), path.join(lumoSources, 'scripts', 'package.js'));
     copyPatch(path.join(patchDir, 'pkg-bundle.js'), path.join(lumoSources, 'scripts', 'pkg-bundle.js'));
@@ -118,6 +118,9 @@ function patchLumoSources() {
 }
 
 function bundle(options) {
+    let opts = {
+                  mainNsName: options.main,
+                };
     const tmpLumoDir = path.join(process.cwd(), 'lumo-' + lumoVersion);
     const emptyOptions = {mainNsName: '',
 			  classpath: [],
@@ -134,7 +137,7 @@ function bundle(options) {
 			  'elide-asserts': false,
 			  args: []};
     
-    options = Object.assign(emptyOptions, options, {classpath: []});   
+    options = Object.assign(emptyOptions, opts, {classpath: []});   
     deleteIfExists(path.join(tmpLumoDir, 'target/bundle.min.js'));
     deleteIfExists(path.join(tmpLumoDir, 'target/bundle.js'));
     var child_process = require('child_process');
@@ -185,8 +188,44 @@ function bundleResources(resourceDirsArray) {
 }
 
 function generateAOT(options) {
-    console.log(`Installing lumo-${lumoVersion} from npm...`);
-    
+    const basicRequires = `
+(require 'lumo.build.api
+         'lumo.analyzer
+         'lumo.cljs-deps
+         'lumo.classpath
+         'lumo.closure
+         'lumo.compiler
+         'lumo.io
+         'lumo.json
+         'lumo.util
+         'cljs.pprint
+         'clojure.core.reducers
+         'clojure.zip
+         'clojure.data
+         'clojure.reflect
+         'clojure.browser.net
+         'clojure.browser.event
+         'cljs.nodejs
+         'cljs.test
+         'cljs.analyzer.api
+         'cljs.spec.test.alpha
+         'cljs.core.specs.alpha)
+(require-macros 'lumo.repl
+                'lumo.util
+                'clojure.template
+                'cljs.pprint
+                'cljs.spec.alpha
+                'cljs.spec.gen.alpha
+                'cljs.spec.test.alpha
+                'cljs.support
+                'cljs.test
+                'cljs.reader
+                'cljs.tools.reader.reader-types
+                'cljs.env.macros
+                'cljs.analyzer.macros
+                'cljs.compiler.macros)
+    `;
+    const isWindows = process.platform === 'win32';
     var child_process = require('child_process');
 
     const globalLumoVersionNum = child_process.execSync(`lumo --version`)
@@ -197,10 +236,11 @@ function generateAOT(options) {
 
     var binaryPath;
     if (!globalLumoMatches) {
-        let isWindows = process.platform === 'win32';
+        console.log(`Installing lumo-${lumoVersion} from npm (no-save)...`);
         child_process.execSync(`npm install lumo-cljs@${lumoVersion} --no-save`,
 			       {stdio:[0,1,2]});
-        binaryPath = './node_modules/lumo-cljs/bin/lumo' + (isWindows) ? '.exe' : '';
+        binaryPath = './node_modules/lumo-cljs/bin/lumo';
+        binaryPath += isWindows ? '.exe' : '';
     } else {
         binaryPath = 'lumo';
     }
@@ -211,6 +251,7 @@ function generateAOT(options) {
     child_process.execSync(binaryPath + ' ' +
 			   `--quiet -c ${options.classpath} -sdfk ${aotTarget}` +
 			   ` -e "(require '${options.main}) ` +
+                           basicRequires +
                            `(.exit js/process (if ${options.main} 0 -1))"`,
 			   {stdio:[0,1,2]});
 }
