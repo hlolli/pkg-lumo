@@ -5,12 +5,11 @@ const path = require('path');
 const os = require('os');
 const zlib = require('zlib');
 const embed = require('./embed');
-
 const argv = process.argv.slice(2);
-const nodeVersion = '8.5.0';
+const nodeVersion = '9.11.2';
 
 function getDirContents(dir, accumPath = dir) {
-  let filenames = fs.readdirSync(dir);
+    let filenames = fs.readdirSync(dir);
 
   return filenames.reduce((ret, filename) => {
     const fname = path.resolve(accumPath, filename);
@@ -81,7 +80,7 @@ function patchNodeGyp(compiler, options, callback) {
 }
 
 function patchRequire(compiler, options, callback) {
-  const libModulePath = path.join(compiler.dir, 'lib','module.js');
+  const libModulePath = path.join(compiler.dir, 'lib','internal', 'modules', 'cjs', 'loader.js');
   fs.writeFileSync(libModulePath,
 		   fs.readFileSync(`scripts/requirePatch.js`),
   );

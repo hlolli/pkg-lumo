@@ -21,10 +21,17 @@
 
 'use strict';
 const zlip = require('zlib');
-const NativeModule = require('native_module');
+const { NativeModule } = require('internal/bootstrap/loaders');
 const util = require('util');
-const internalModule = require('internal/module');
-const { getURLFromFilePath } = require('internal/url');
+
+const {
+  makeRequireFunction,
+  requireDepth,
+  stripBOM,
+  stripShebang
+} = require('internal/modules/cjs/helpers');
+
+
 const vm = require('vm');
 const assert = require('assert').ok;
 const fs = require('fs');
@@ -39,10 +46,20 @@ const experimentalModules = !!process.binding('config').experimentalModules;
 
 const errors = require('internal/errors');
 
-const Loader = require('internal/loader/Loader');
-const ModuleJob = require('internal/loader/ModuleJob');
-const { createDynamicModule } = require('internal/loader/ModuleWrap');
-let ESMLoader;
+let asyncESM;
+let ModuleJob;
+let createDynamicModule;
+let getURLFromFilePath;
+let decorateErrorStack;
+
+function lazyLoadESM() {
+  asyncESM = require('internal/process/esm_loader');
+  ModuleJob = require('internal/modules/esm/module_job');
+  createDynamicModule = require(
+    'internal/modules/esm/create_dynamic_module');
+  decorateErrorStack = require('internal/util').decorateErrorStack;
+  getURLFromFilePath = require('internal/url').getURLFromFilePath;
+}
 
 function stat(filename) {
   filename = path.toNamespacedPath(filename);
@@ -491,27 +508,6 @@ Module._load = function(request, parent, isMain) {
     debug('Module._load REQUEST %s parent: %s', request, parent.id);
   }
 
-  if (isMain && experimentalModules) {
-    (async () => {
-      // loader setup
-      if (!ESMLoader) {
-        ESMLoader = new Loader();
-        const userLoader = process.binding('config').userLoader;
-        if (userLoader) {
-          const hooks = await ESMLoader.import(userLoader);
-          ESMLoader = new Loader();
-          ESMLoader.hook(hooks);
-        }
-      }
-      await ESMLoader.import(getURLFromFilePath(request).pathname);
-    })()
-      .catch((e) => {
-	console.error(e);
-	process.exit(1);
-      });
-    return;
-  }
-
   var filename = Module._resolveFilename(request, parent, isMain);
 
   var cachedModule = Module._cache[filename];
@@ -539,6 +535,7 @@ Module._load = function(request, parent, isMain) {
 
   return module.exports;
 };
+
 
 function tryModuleLoad(module, filename) {
   var threw = true;
@@ -651,18 +648,26 @@ Module.prototype.load = function(filename) {
   Module._extensions[extension](this, filename);
   this.loaded = true;
 
-  if (ESMLoader) {
+  if (experimentalModules) {
+    if (asyncESM === undefined) lazyLoadESM();
+    const ESMLoader = asyncESM.ESMLoader;
     const url = getURLFromFilePath(filename);
     const urlString = `${url}`;
+    const exports = this.exports;
     if (ESMLoader.moduleMap.has(urlString) !== true) {
-      const ctx = createDynamicModule(['default'], url);
-      ctx.reflect.exports.default.set(this.exports);
-      ESMLoader.moduleMap.set(urlString,
-			      new ModuleJob(ESMLoader, url, async () => ctx));
+      ESMLoader.moduleMap.set(
+        urlString,
+        new ModuleJob(ESMLoader, url, async () => {
+          const ctx = createDynamicModule(
+            ['default'], url);
+          ctx.reflect.exports.default.set(exports);
+          return ctx;
+        })
+      );
     } else {
       const job = ESMLoader.moduleMap.get(urlString);
       if (job.reflect)
-        job.reflect.exports.default.set(this.exports);
+        job.reflect.exports.default.set(exports);
     }
   }
 };
@@ -688,7 +693,7 @@ var resolvedArgv;
 // Returns exception, if any.
 Module.prototype._compile = function(content, filename) {
 
-  content = internalModule.stripShebang(content);
+  content = stripShebang(content);
 
   // create wrapper function
   var wrapper = Module.wrap(content);
@@ -721,8 +726,8 @@ Module.prototype._compile = function(content, filename) {
     }
   }
   var dirname = path.dirname(filename);
-  var require = internalModule.makeRequireFunction(this);
-  var depth = internalModule.requireDepth;
+  var require = makeRequireFunction(this);
+  var depth = requireDepth;
   if (depth === 0) stat.cache = new Map();
   var result;
   if (inspectorWrapper) {
@@ -743,9 +748,9 @@ Module._extensions['.js'] = function(module, filename) {
   const bundledResolve = lumo.internal.embedded.get(bundledKey);
   if ((bundledResolve === undefined) || !(bundledResolve instanceof Buffer)) {
     var content = fs.readFileSync(filename, 'utf8');
-    module._compile(internalModule.stripBOM(content), filename);
+    module._compile(stripBOM(content), filename);
   } else {
-    module._compile(internalModule.stripBOM(
+    module._compile(stripBOM(
       zlib.inflateSync(bundledResolve).toString()), bundledKey);
   }
 };
@@ -758,7 +763,7 @@ Module._extensions['.json'] = function(module, filename) {
   if ((bundledResolve === undefined) || !(bundledResolve instanceof Buffer)) {
     var content = fs.readFileSync(filename, 'utf8');
     try {
-      module.exports = JSON.parse(internalModule.stripBOM(content));
+      module.exports = JSON.parse(stripBOM(content));
     } catch (err) {
       err.message = filename + ': ' + err.message;
       throw err;
@@ -766,7 +771,7 @@ Module._extensions['.json'] = function(module, filename) {
   } else {
     try {
       module.exports = JSON.parse(
-	internalModule.stripBOM(zlib.inflateSync(bundledResolve).toString()));
+	stripBOM(zlib.inflateSync(bundledResolve).toString()));
     } catch (err) {
       err.message = filename + ': ' + err.message;
       throw err;
