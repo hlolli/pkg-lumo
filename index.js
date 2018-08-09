@@ -33,6 +33,11 @@ const prompt = {
         prompt: 'never',
         describe: 'colon seperated directory path(s) to embedded resources',
     },
+    replaceFiles: {
+        type: 'input',
+        prompt: 'never',
+        describe: 'Replace files(monkeypatch) by passing a json where key is the path and value the file to replace. ex {\"./node_modules/foo/bar.js\": \"./fiz.js\"}',
+    },
     main: {
         type: 'input',
         prompt: 'if-empty',
@@ -63,19 +68,19 @@ function removeEmptyStringFromArray (value) {
     });
 }
 
-function extractTarget() {
-    var zipFilePath = path.join(libDir, 'target-' + lumoVersion + '.zip');
-    var fileContents = fs.readFileSync(zipFilePath);
-    var zipped = new JSZip().load(fileContents);
-    for (var file in zipped.files) {
-	var content = zipped.file(file);
-	var dest = path.join(process.cwd(), file);
-	if (content && !content.options.dir) {
-	    // console.log(dest, content.options.dir);
-	    writeFileAndDir(dest, content.asNodeBuffer());
-	}
-    }
-}
+// function extractTarget() {
+//     var zipFilePath = path.join(libDir, 'target-' + lumoVersion + '.zip');
+//     var fileContents = fs.readFileSync(zipFilePath);
+//     var zipped = new JSZip().load(fileContents);
+//     for (var file in zipped.files) {
+// 	var content = zipped.file(file);
+// 	var dest = path.join(process.cwd(), file);
+// 	if (content && !content.options.dir) {
+// 	    // console.log(dest, content.options.dir);
+// 	    writeFileAndDir(dest, content.asNodeBuffer());
+// 	}
+//     }
+// }
 
 function extractLumo() {
     var zipFilePath = path.join(libDir, 'lumo-' + lumoVersion + '.zip');
@@ -117,6 +122,16 @@ function patchLumoSources() {
     copyPatch(path.join(patchDir, 'embed.js'), path.join(lumoSources, 'scripts', 'embed.js'));
 }
 
+function applyReplaces(replaceFiles) {
+    if (replaceFiles) {
+        let replace_json = JSON.parse(replaceFiles);
+        for (fpath in replace_json) {
+            let replacer_contents = fs.readFileSync(replace_json[fpath]);
+            fs.writeFileSync(fpath, replacer_contents, {encoding:'utf8',flag:'w'});
+        }
+    }
+}
+
 function bundle(options) {
     let opts = {
                   mainNsName: options.main,
@@ -147,7 +162,7 @@ function bundle(options) {
 			    cwd: tmpLumoDir});
 }
 
-function bundleNodeModules() {
+function bundleNodeModules(replaceFiles) {
     if (fs.existsSync('./package.json')) {
 	var node_modules_exists = fs.existsSync('./node_modules');
 	if(node_modules_exists) {
@@ -156,6 +171,7 @@ function bundleNodeModules() {
 	console.log('installing production node modules via `npm install --production`');
 	var child_process = require('child_process');
 	child_process.execSync(`npm install --production`, {stdio:[0,1,2]});
+        applyReplaces(replaceFiles);
 	console.log('moveing node_modules to be bundled');
 	fse.moveSync('./node_modules',
 		     path.join(process.cwd(), 'lumo-' + lumoVersion, 'target', 'node_modules'),
@@ -169,7 +185,8 @@ function bundleNodeModules() {
 }
 
 function bundleResources(resourceDirsArray) {
-    resourceDirsArray.forEach(resourceDir => {
+    if (resourceDirsArray) {
+        resourceDirsArray.forEach(resourceDir => {
 	if (fs.existsSync(resourceDir)) {
 	    var dest = path.join(process.cwd(),
 				 'lumo-' + lumoVersion,
@@ -184,7 +201,8 @@ function bundleResources(resourceDirsArray) {
 	} else {
 	    console.log(`WARNING! Specified resource dir ${resourceDir} was not found!`);
 	}
-    });
+        });
+    }
 }
 
 function generateAOT(options) {
@@ -248,14 +266,16 @@ yargsInteractive()
     .interactive(prompt)
     .then(res => {
 
-        var resourceDirsArray = res.resources.split(':');
-        resourceDirsArray = removeEmptyStringFromArray(resourceDirsArray);
+        var resourceDirsArray;
+        if (res.resources) {
+            resourceDirsArray = removeEmptyStringFromArray(res.resources.split(':'));
+        }
         
         rmdir(path.join(process.cwd(), 'lumo-' + lumoVersion), error => {
 	    extractLumo();
 	    patchLumoSources();
 	    bundle(res);
-	    bundleNodeModules();
+	    bundleNodeModules(res.replaceFiles);
 	    bundleResources(resourceDirsArray);
 	    generateAOT(res);
 	    packageNexe();

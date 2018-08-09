@@ -744,15 +744,21 @@ Module.prototype._compile = function(content, filename) {
 
 // Native extension for .js
 Module._extensions['.js'] = function(module, filename) {
-  const bundledKey = path.join('node_modules', filename.split(/node_modules[\\\/]/).pop());
-  const bundledResolve = lumo.internal.embedded.get(bundledKey);
-  if ((bundledResolve === undefined) || !(bundledResolve instanceof Buffer)) {
-    var content = fs.readFileSync(filename, 'utf8');
-    module._compile(stripBOM(content), filename);
-  } else {
-    module._compile(stripBOM(
-      zlib.inflateSync(bundledResolve).toString()), bundledKey);
-  }
+    // console.log('filename: ', filename);
+    var bundledKey = path.join('node_modules', filename.split(/node_modules[\\\/]/).pop());
+    if (!/\.js$/i.test(bundledKey)) {
+        bundledKey += '.js';
+    }
+    // console.log('bundledKey: ', bundledKey);
+    const bundledResolve = lumo.internal.embedded.get(bundledKey);
+    // console.log('bundledResolve: ', bundledResolve);
+    if ((bundledResolve === undefined) || !(bundledResolve instanceof Buffer)) {
+        var content = fs.readFileSync(filename, 'utf8');
+        module._compile(stripBOM(content), filename);
+    } else {
+        module._compile(stripBOM(
+            zlib.inflateSync(bundledResolve).toString()), bundledKey);
+    }
 };
 
 
