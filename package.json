@@ -1,6 +1,6 @@
 {
    "name": "pkg-lumo",
-   "version": "1.0.1-beta",
+   "version": "1.0.1",
    "description": "Compile your own lumo binary",
    "author": "Hlöðver Sigurðsson <hlolli@gmail.com> (http://hlolli.com)",
    "license": "EPL-1.0",
