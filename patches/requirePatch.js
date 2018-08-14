@@ -89,6 +89,13 @@ function Module(id, parent) {
   this.loaded = false;
   this.children = [];
 }
+
+const builtinModules = Object.keys(NativeModule._source)
+  .filter(NativeModule.nonInternalExists);
+
+Object.freeze(builtinModules);
+Module.builtinModules = builtinModules;
+
 module.exports = Module;
 
 Module._cache = Object.create(null);
