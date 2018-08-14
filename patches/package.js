@@ -13,6 +13,9 @@ function getDirContents(dir, accumPath = dir) {
 
   return filenames.reduce((ret, filename) => {
     const fname = path.resolve(accumPath, filename);
+    if (fname.endsWith('.bin/lumo')) {
+        return ret;
+    }
     const fStat = fs.statSync(fname);
 
     if (fStat.isDirectory()) {

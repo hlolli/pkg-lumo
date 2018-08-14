@@ -173,11 +173,6 @@ function bundleNodeModules(replaceFiles) {
 	child_process.execSync(`npm install --production`, {stdio:[0,1,2]});
         applyReplaces(replaceFiles);
         
-        // if lumo-cljs is inside node_modules, then delete it!
-        if(fs.existsSync('./node_modules/lumo-cljs')) {
-	    fse.removeSync('./node_modules/lumo-cljs');
-	}
-        
 	console.log('moveing node_modules to be bundled');
 	fse.moveSync('./node_modules',
 		     path.join(process.cwd(), 'lumo-' + lumoVersion, 'target', 'node_modules'),
@@ -245,6 +240,11 @@ function generateAOT(options) {
 
 function packageNexe() {
     const tmpLumoDir = path.join(process.cwd(), 'lumo-' + lumoVersion);
+    // if lumo-cljs is inside node_modules, then delete it!
+    if(fs.existsSync(path.join(tmpLumoDir, 'target', 'node_modules', 'lumo-cljs'))) {
+        console.log('DELETEING', path.join(tmpLumoDir, 'target', 'node_modules', 'lumo-cljs'));
+        fse.removeSync(path.join(tmpLumoDir, 'target', 'node_modules', 'lumo-cljs'));
+    }
     console.log('Generateing the nexe executeable, this may take a while and consume a lot of memory.')
     var child_process = require('child_process');
     child_process.execSync(`node scripts/package.js`,
